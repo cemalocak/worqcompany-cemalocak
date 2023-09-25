@@ -12,13 +12,12 @@ def find_product(request):
 		url = request.POST['url']
 		product = Trendyol_Product(url = url)
 		data_json = product.get_product_data()
-		product.save_from_json(data_json)
+		if data_json != False:
+			product.save_from_json(data_json)
+			
 		return redirect('index')
 
 	
-
-
-
 class Main_Page(TemplateView):
 	template_name = 'index.html'
 
@@ -27,7 +26,6 @@ class Main_Page(TemplateView):
 		products = Trendyol_Product.objects.all()
 		context['products'] = products
 		return context
-
 
 
 class Product_Detail(TemplateView):
@@ -39,6 +37,7 @@ class Product_Detail(TemplateView):
 		context['product'] = product
 		return context
 	
+
 def Product_Delete(request, pk):
 	product = Trendyol_Product.objects.get(pk=pk)
 	product.delete()
