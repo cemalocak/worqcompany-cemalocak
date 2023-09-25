@@ -2,77 +2,78 @@ from django.shortcuts import redirect
 from django.views.generic import TemplateView
 from scrap.models import Merchant, Trendyol_Product
 from django.views.decorators.csrf import csrf_exempt
-from bs4 import BeautifulSoup	
-import requests
 import json
+import logging
 
 
 @csrf_exempt
 def find_product(request):
 	if request.method == 'POST':
 		url = request.POST['url']
-		r = requests.get(url)
-		source = BeautifulSoup(r.content,"lxml")
-		
-		# Ürün ve Satıcı Bilgilerinin Alınması	
-		data = source.findAll("script", {"type":"application/javascript"})
-		data_source = None
-		data_json = None
-		for i in data:
-			if "window.__PRODUCT_DETAIL_APP_INITIAL_STATE__" in i.text:
-				data_source = i.text.replace("\n","").replace("window.__PRODUCT_DETAIL_APP_INITIAL_STATE__","")
-				data_source = data_source[data_source.find("=")+1:]
-				data_source = data_source[:data_source.find("window.TYPageName")]
-				data_source = data_source[:data_source.rfind(";")]
-				break
-		try:
-			data_json = json.loads(data_source)
+		product = Trendyol_Product(url = url)
+		data_json = product.get_product_data()
 
+		product_info = {
+			"name": "",
+			"brand": "",
+			"sellingPrice": "",
+			"discountedPrice": "",
+			"category": "",
+			"merchant": {
+				"name": "",
+				"cityName": "",
+				"sellerScore": ""
+			},
+			"otherMerchants": [],
+			"url": ""
+		}
 
-			#Satıcı Bilgilerinin Kaydedilmesi
-			merchant_name = data_json['product']['merchant']['name']
-			merchant_city = data_json['product']['merchant']['cityName']
-			merchant_seller_score = data_json['product']['merchant']['sellerScore']
+		#Ürün Bilgilerinin Alınması
 
-			product_merchant = Merchant(name=merchant_name, city_name=merchant_city, seller_score=merchant_seller_score)
-			product_merchant.save()
+		product_name = data_json['product']['name']
+		product_brand = data_json['product']['brand']['name']
+		product_category = data_json['product']['category']['hierarchy']
+		product_sellingPrice = data_json['product']['price']['sellingPrice']['value']
+		product_discountedPrice = data_json['product']['price']['discountedPrice']['value']
 
-			#Diğer Satıcı Bilgilerinin Kaydedilmesi
-			other_merchants = []
-			for merchant in data_json['product']['otherMerchants']:
-				name = merchant['merchant']['name']
-				city = merchant['merchant']['cityName']
-				seller_score = merchant['merchant']['sellerScore']
-				other_merchant = Merchant(name=name, city_name=city, seller_score=seller_score)
-				other_merchant.save()
-				other_merchants.append(other_merchant)
+		product_info['name'] = product_name
+		product_info['brand'] = product_brand
+		product_info['category'] = product_category
+		product_info['sellingPrice'] = product_sellingPrice
+		product_info['discountedPrice'] = product_discountedPrice
+		product_info['url'] = url
 
+		#Satıcı Bilgilerinin Kaydedilmesi
+		merchant_name = data_json['product']['merchant']['name']
+		merchant_city = data_json['product']['merchant']['cityName']
+		merchant_seller_score = data_json['product']['merchant']['sellerScore']
 
+		product_info['merchant']['name'] = merchant_name
+		product_info['merchant']['cityName'] = merchant_city
+		product_info['merchant']['sellerScore'] = merchant_seller_score
 
-			product_name = data_json['product']['name']
-			product_brand = data_json['product']['brand']['name']
-			product_category = data_json['product']['category']['hierarchy']
-			product_sellingPrice = data_json['product']['price']['sellingPrice']['value']
-			product_discountedPrice = data_json['product']['price']['discountedPrice']['value']
+		#Diğer Satıcı Bilgilerinin Kaydedilmesi
+		other_merchants = []
+		for merchant in data_json['product']['otherMerchants']:
+			other_merchant = {
+				"name": "",
+				"cityName": "",
+				"sellerScore": ""
+			}
 
-			product = Trendyol_Product(
-				name=product_name, 
-				brand=product_brand, 
-				sellingPrice=product_sellingPrice, 
-				discountedPrice=product_discountedPrice, 
-				category=product_category, 
-				merchant=product_merchant,
-				url = url
-				)
-			product.save()
-			product.other_merchants.set(other_merchants)
-			product.save()
-			return redirect('index')
-		except Exception as e:
-			print(e)
-			print("\n")
-			print(data_source)
-			return redirect('index')
+			name = merchant['merchant']['name']
+			city = merchant['merchant']['cityName']
+			seller_score = merchant['merchant']['sellerScore']
+
+			other_merchant['name'] = name
+			other_merchant['cityName'] = city
+			other_merchant['sellerScore'] = seller_score
+			product_info['otherMerchants'].append(other_merchant)
+
+		print(product_info)
+
+		return redirect('index')
+
 	
 
 
